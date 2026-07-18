@@ -1,0 +1,26 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Node
+node_modules/
+client/dist/
+server/dist/
+
+# Large/vendored — not our code, don't commit
+plans/aa25assist_download/
+plans/aa25assist_extract/
+plans/UEViewer/
+
+# Generated game assets (re-run plans/pipeline_sf_convert scripts).
+# Distributed via GitHub release + fetched on demand -- see plans/pipeline_sf_convert/README.md.
+client/public/assets/umodel/
+client/public/assets/map/
+client/public/assets_optimized/

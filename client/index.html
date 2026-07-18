@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>modern-army</title>
+    <style>
+      html, body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        background: #080b0d;
+      }
+      #app { width: 100%; height: 100%; display: block; touch-action: none; }
+      #loading {
+        position: fixed;
+        inset: 0;
+        z-index: 100;
+        display: grid;
+        place-content: center;
+        gap: 14px;
+        color: #d9e2e5;
+        background:
+          radial-gradient(circle at 50% 42%, rgba(76, 96, 103, .2), transparent 34%),
+          linear-gradient(145deg, #11171a, #060809);
+        font: 600 13px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+        letter-spacing: .22em;
+        text-align: center;
+        transition: opacity .25s ease;
+      }
+      #loading::before {
+        content: "";
+        width: 38px;
+        height: 38px;
+        margin: auto;
+        border: 2px solid rgba(217, 226, 229, .18);
+        border-top-color: #c9d8dc;
+        border-radius: 50%;
+        animation: spin .8s linear infinite;
+      }
+      #loading.ready { opacity: 0; pointer-events: none; }
+      @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+  </head>
+  <body>
+    <canvas id="app"></canvas>
+    <div id="loading" role="status" aria-live="polite">LOADING PIPELINE</div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
