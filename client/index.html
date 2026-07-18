@@ -40,11 +40,33 @@
       }
       #loading.ready { opacity: 0; pointer-events: none; }
       @keyframes spin { to { transform: rotate(360deg); } }
+      #loading-track {
+        width: 220px;
+        height: 4px;
+        border-radius: 2px;
+        background: rgba(217, 226, 229, .14);
+        overflow: hidden;
+      }
+      #loading-bar {
+        width: 0%;
+        height: 100%;
+        background: #c9d8dc;
+        transition: width .2s ease;
+      }
+      #loading-pct {
+        font-size: 11px;
+        letter-spacing: .12em;
+        color: rgba(217, 226, 229, .6);
+      }
     </style>
   </head>
   <body>
     <canvas id="app"></canvas>
-    <div id="loading" role="status" aria-live="polite">LOADING PIPELINE</div>
+    <div id="loading" role="status" aria-live="polite">
+      LOADING PIPELINE
+      <div id="loading-track"><div id="loading-bar"></div></div>
+      <div id="loading-pct"></div>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

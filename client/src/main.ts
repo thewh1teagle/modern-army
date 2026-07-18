@@ -39,7 +39,14 @@ async function start(): Promise<void> {
   const sun = new DirectionalLight("sun", new Vector3(-0.4, -1, -0.3), scene);
   sun.intensity = 0.7;
 
-  const map = await loadMap(scene);
+  const progressBar = document.getElementById("loading-bar") as HTMLDivElement | null;
+  const progressLabel = document.getElementById("loading-pct") as HTMLDivElement | null;
+  const map = await loadMap(scene, (loaded, total) => {
+    if (!progressBar || !total) return;
+    const pct = Math.min(100, Math.round((loaded / total) * 100));
+    progressBar.style.width = `${pct}%`;
+    if (progressLabel) progressLabel.textContent = `${pct}%`;
+  });
   const camera = createPlayer(scene, canvas, map);
 
   const movers = new Movers(scene);

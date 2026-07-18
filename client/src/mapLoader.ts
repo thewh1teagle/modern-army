@@ -54,9 +54,10 @@ interface BspPoly {
   twoSided: boolean;
 }
 interface AssetsIndex {
-  meshes: Record<string, string>;
-  textures: Record<string, { path: string; w: number; h: number }>;
+  meshes: Record<string, { path: string; size: number; textures: string[] }>;
+  textures: Record<string, { path: string; w: number; h: number; size: number }>;
 }
+export type ProgressCallback = (loadedBytes: number, totalBytes: number) => void;
 
 async function json<T>(url: string): Promise<T> {
   const r = await fetch(url);
@@ -68,7 +69,20 @@ export class MapLoader {
   private matCache = new Map<string, StandardMaterial>();
   index!: AssetsIndex;
 
+  /** Bytes loaded / expected so far, reported to onProgress as they change.
+   * Approximate: a mesh or texture counts as "loaded" only once its whole
+   * download finishes (no intra-file byte tracking), but that's granular
+   * enough across thousands of small assets to drive a smooth progress bar. */
+  private loadedBytes = 0;
+  private totalBytes = 0;
+  onProgress: ProgressCallback | null = null;
+
   constructor(private scene: Scene) {}
+
+  private addLoaded(bytes: number): void {
+    this.loadedBytes += bytes;
+    this.onProgress?.(this.loadedBytes, this.totalBytes);
+  }
 
   /** Material from a UE texture reference like "T-METAL.misc.met_misc_pipe03". */
   private material(texRef: string): StandardMaterial {
@@ -86,12 +100,41 @@ export class MapLoader {
       // alpha only for obviously-masked textures (fences, foliage, glass)
       const masked = /trans|alpha|fence|grate|leaf|foliage|branch|tree|glass|wire|rail|chain|_t$/.test(short);
       tex.hasAlpha = masked;
+      tex.onLoadObservable.addOnce(() => this.addLoaded(entry.size));
     } else {
       mat.diffuseColor = new Color3(0.5, 0.45, 0.4);
     }
     mat.backFaceCulling = true;
     this.matCache.set(short, mat);
     return mat;
+  }
+
+  /** Sum the bytes of every mesh/texture this map will actually request, so
+   * onProgress can report a real percentage instead of an indeterminate spinner. */
+  async computeTotalBytes(map: MapData): Promise<void> {
+    const bsp = await json<{ polys: BspPoly[] }>(`${ASSET_BASE}/map/bsp.json`);
+    const neededTextures = new Set<string>(["ter_snow_plain"]);
+    for (const p of bsp.polys) neededTextures.add(p.texture.split(".").pop()!.toLowerCase());
+
+    const meshKeys = new Set<string>();
+    for (const a of map.staticMeshActors) {
+      const parts = a.mesh.split(".");
+      meshKeys.add(`${parts[0]}.${parts[parts.length - 1]}`.toLowerCase());
+    }
+
+    let total = 0;
+    for (const key of meshKeys) {
+      const entry = this.index.meshes[key];
+      if (!entry) continue;
+      total += entry.size;
+      for (const t of entry.textures) neededTextures.add(t);
+    }
+    for (const short of neededTextures) {
+      const entry = this.index.textures[short];
+      if (entry) total += entry.size;
+    }
+    this.totalBytes = total;
+    this.onProgress?.(this.loadedBytes, this.totalBytes);
   }
 
   /** Build the BSP world geometry, one mesh per texture. */
@@ -226,21 +269,26 @@ export class MapLoader {
     for (const [meshRef, actors] of byMesh) {
       const parts = meshRef.split(".");
       const key = `${parts[0]}.${parts[parts.length - 1]}`.toLowerCase();
-      const path = this.index.meshes[key];
-      if (!path) {
+      const entry = this.index.meshes[key];
+      if (!entry) {
         missing++;
         continue;
       }
-      jobs.push(this.instantiate(path, actors));
+      jobs.push(this.instantiate(entry, actors));
     }
     await Promise.all(jobs);
     if (missing) console.warn(`${missing} meshes not found in export`);
   }
 
-  private async instantiate(path: string, actors: MapData["staticMeshActors"]): Promise<void> {
+  private async instantiate(
+    entry: { path: string; size: number },
+    actors: MapData["staticMeshActors"]
+  ): Promise<void> {
+    const path = entry.path;
     const dir = `${ASSET_BASE}/${path.substring(0, path.lastIndexOf("/") + 1)}`;
     const file = path.substring(path.lastIndexOf("/") + 1);
     const res = await SceneLoader.ImportMeshAsync(null, dir, file, this.scene);
+    this.addLoaded(entry.size);
     const root = res.meshes[0]; // gltf __root__
     // apply umodel material names → textures
     for (const m of res.meshes) {
@@ -270,10 +318,12 @@ export class MapLoader {
   }
 }
 
-export async function loadMap(scene: Scene): Promise<MapData> {
+export async function loadMap(scene: Scene, onProgress?: ProgressCallback): Promise<MapData> {
   const loader = new MapLoader(scene);
+  loader.onProgress = onProgress ?? null;
   loader.index = await json(`${ASSET_BASE}/map/assets_index.json`);
   const map = await json<MapData>(`${ASSET_BASE}/map/map.json`);
+  await loader.computeTotalBytes(map);
   await loader.loadBsp();
   await loader.loadTerrain();
   await loader.loadActors(map);

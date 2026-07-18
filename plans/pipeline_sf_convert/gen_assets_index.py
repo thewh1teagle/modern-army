@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 """Build assets_index.json for the client from the umodel export tree.
 
-- meshes:   lowercase "package.meshname" -> mesh path (relative to /assets/)
-- textures: lowercase "texturename" -> {path, w, h}  (names are globally
+- meshes:   lowercase "package.meshname" -> {path, size, textures} -- path is
+  relative to /assets/, size in bytes (for the loading progress bar),
+  textures is the list of material/texture short-names this mesh references
+  (so the client can predict which textures it'll need before fetching them).
+- textures: lowercase "texturename" -> {path, w, h, size}  (names are globally
   unique enough for AA2.5; last one wins on collision)
 
 Supports both the raw dev export (.gltf + .png) and the optimized tree
@@ -48,23 +51,45 @@ def webp_size(path: Path) -> tuple[int, int]:
     raise ValueError(f"unsupported webp format {fmt!r}: {path}")
 
 
+def gltf_material_names(path: Path) -> list[str]:
+    doc = json.loads(path.read_text())
+    return [m.get("name", "") for m in doc.get("materials", [])]
+
+
+def glb_material_names(path: Path) -> list[str]:
+    with open(path, "rb") as f:
+        data = f.read(4 * 1024 * 1024)  # JSON chunk is first; meshes here are small
+    assert data[:4] == b"glTF", path
+    chunk_len, chunk_type = struct.unpack_from("<II", data, 12)
+    assert chunk_type == 0x4E4F534A, f"expected JSON chunk in {path}"  # "JSON"
+    doc = json.loads(data[20 : 20 + chunk_len])
+    return [m.get("name", "") for m in doc.get("materials", [])]
+
+
 def main() -> None:
     assets = Path(sys.argv[1])
     root = assets / "umodel"
-    meshes: dict[str, str] = {}
+    meshes: dict[str, dict] = {}
     textures: dict[str, dict] = {}
 
     mesh_ext = "glb" if any(root.rglob("*.glb")) else "gltf"
+    material_names_fn = glb_material_names if mesh_ext == "glb" else gltf_material_names
     for mesh in root.rglob(f"*.{mesh_ext}"):
         pkg = mesh.relative_to(root).parts[0]
         key = f"{pkg}.{mesh.stem}".lower()
-        meshes[key] = str(mesh.relative_to(assets))
+        tex_refs = sorted({n.split(".")[-1].lower() for n in material_names_fn(mesh) if n})
+        size = mesh.stat().st_size
+        if mesh_ext == "gltf":
+            bin_path = mesh.with_suffix(".bin")
+            if bin_path.exists():
+                size += bin_path.stat().st_size
+        meshes[key] = {"path": str(mesh.relative_to(assets)), "size": size, "textures": tex_refs}
 
     tex_ext = "webp" if any(root.rglob("*.webp")) else "png"
     size_fn = webp_size if tex_ext == "webp" else png_size
     for tex in root.rglob(f"*.{tex_ext}"):
         w, h = size_fn(tex)
-        textures[tex.stem.lower()] = {"path": str(tex.relative_to(assets)), "w": w, "h": h}
+        textures[tex.stem.lower()] = {"path": str(tex.relative_to(assets)), "w": w, "h": h, "size": tex.stat().st_size}
 
     out = assets / "map" / "assets_index.json"
     json.dump({"meshes": meshes, "textures": textures}, open(out, "w"))
