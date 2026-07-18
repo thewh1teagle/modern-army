@@ -40,6 +40,7 @@ jobs:
 
       - name: Fetch optimized game assets from release
         run: |
+          mkdir -p client/public
           curl -fL "https://github.com/${{ github.repository }}/releases/download/${ASSETS_RELEASE_TAG}/assets_optimized_${ASSETS_RELEASE_TAG}.tar.gz" \
             -o /tmp/assets_optimized.tar.gz
           tar -xzf /tmp/assets_optimized.tar.gz -C client/public
