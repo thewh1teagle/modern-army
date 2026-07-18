@@ -12,10 +12,17 @@ import { pos, rot, UU } from "./ue";
 
 // "assets" (dev, default): raw umodel export -- uncompressed PNGs + per-mesh
 // .gltf/.bin, fast to regenerate while iterating on the pipeline scripts.
-// "assets_optimized": WebP textures + draco-compressed .glb (see
-// plans/pipeline_sf_convert/optimize_assets.md) -- smaller, but lossy and
-// slower to rebuild, so it's opt-in via VITE_ASSET_DIR for prod builds.
-export const ASSET_BASE = `/${import.meta.env.VITE_ASSET_DIR ?? "assets"}`;
+// "assets_optimized": WebP textures + draco-compressed .glb, fetched from a
+// GitHub release and baked into the site by CI (see .github/workflows and
+// plans/pipeline_sf_convert/README.md) -- opt-in via VITE_ASSET_DIR.
+// VITE_ASSET_DIR may also be a full URL, to load assets from a different
+// origin (e.g. a CDN) than the one serving the app itself.
+// import.meta.env.BASE_URL is Vite's configured `base` (e.g. "/modern-army/"
+// on GitHub Pages, "/" locally) -- same-origin asset paths must respect it.
+const assetDir = import.meta.env.VITE_ASSET_DIR ?? "assets";
+export const ASSET_BASE = /^https?:\/\//.test(assetDir)
+  ? assetDir.replace(/\/$/, "")
+  : `${import.meta.env.BASE_URL}${assetDir}`.replace(/\/\//g, "/");
 
 // ---- data shapes (see plans/pipeline_sf_convert/*.py) ----
 export interface MapData {
